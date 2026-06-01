@@ -1,0 +1,100 @@
+@isTest
+private class EnrollmentAssignmentTest {
+
+    @testSetup
+    static void setup() {
+        List<Contact> cons = new List<Contact>();
+        for(Integer i=1; i<=6; i++)
+            cons.add(new Contact(LastName='Test'+i, Email='test'+i+'@email.com'));
+        insert cons;
+    }
+
+    @isTest
+    static void testRestApiSuccess() {
+
+        RestContext.request = new RestRequest();
+        RestContext.response = new RestResponse();
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{"scores":[{"contactEmail":"test1@email.com","score":85,"recommendedAction":"Schedule Call","sourceSystem":"EDMO","scoredAt":"2026-03-10T10:30:00Z"}]}'
+        );
+
+        Test.startTest();
+        EnrollmentScoreAPI.createScores();
+        Test.stopTest();
+
+        System.assertEquals(1,[SELECT Count() FROM Enrollment_Score__c]);
+    }
+
+    @isTest
+    static void testContactNotFound() {
+
+        RestContext.request = new RestRequest();
+        RestContext.response = new RestResponse();
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{"scores":[{"contactEmail":"fake@email.com","score":90,"recommendedAction":"Schedule Call","sourceSystem":"EDMO","scoredAt":"2026-03-10T10:30:00Z"}]}'
+        );
+
+        String result = EnrollmentScoreAPI.createScores();
+        System.assert(result.contains('Contact Not Found'));
+    }
+
+    @isTest
+    static void testBulkInsert() {
+
+        RestContext.request = new RestRequest();
+        RestContext.response = new RestResponse();
+
+        RestContext.request.requestBody = Blob.valueOf(
+            '{"scores":['+
+            '{"contactEmail":"test1@email.com","score":80},'+
+            '{"contactEmail":"test2@email.com","score":70},'+
+            '{"contactEmail":"test3@email.com","score":60},'+
+            '{"contactEmail":"test4@email.com","score":50},'+
+            '{"contactEmail":"test5@email.com","score":40}]}'
+        );
+
+        Test.startTest();
+        EnrollmentScoreAPI.createScores();
+        Test.stopTest();
+
+        System.assertEquals(5,[SELECT Count() FROM Enrollment_Score__c]);
+    }
+
+    @isTest
+    static void testPriorityUpdate() {
+
+        Contact c = [SELECT Id FROM Contact WHERE Email='test1@email.com' LIMIT 1];
+
+        insert new Enrollment_Score__c(
+            Contact__c=c.Id,
+            Score__c=90,
+            Scored_At__c=System.now()
+        );
+
+        System.assertEquals('Hot',[SELECT Enrollment_Priority__c FROM Contact WHERE Id=:c.Id].Enrollment_Priority__c);
+    }
+
+    @isTest
+    static void testLatestScoreWins() {
+
+        Contact c = [SELECT Id FROM Contact WHERE Email='test2@email.com' LIMIT 1];
+
+        insert new List<Enrollment_Score__c>{
+            new Enrollment_Score__c(
+                Contact__c=c.Id,
+                Score__c=30,
+                Scored_At__c=System.now().addHours(-1)
+            ),
+            new Enrollment_Score__c(
+                Contact__c=c.Id,
+                Score__c=90,
+                Scored_At__c=System.now()
+            )
+        };
+
+        System.assertEquals('Hot',[SELECT Enrollment_Priority__c FROM Contact WHERE Id=:c.Id].Enrollment_Priority__c
+        );
+    }
+}
