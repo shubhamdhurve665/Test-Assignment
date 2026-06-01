@@ -1,0 +1,71 @@
+@RestResource(urlMapping='/enrollment-scores/*')
+global with sharing class EnrollmentScoreAPI {
+
+    public class ScoreRequest {
+        public String contactEmail;
+        public Integer score;
+        public String recommendedAction;
+        public String sourceSystem;
+        public Datetime scoredAt;
+    }
+
+    public class RequestWrapper {
+        public List<ScoreRequest> scores;
+    }
+
+    public class ResponseItem {
+        public String email;
+        public Boolean success;
+        public String message;
+    }
+
+    @HttpPost
+    global static String createScores() {
+
+        RequestWrapper req = (RequestWrapper)JSON.deserialize(
+            RestContext.request.requestBody.toString(),
+            RequestWrapper.class
+        );
+
+        Set<String> emails = new Set<String>();
+        for (ScoreRequest s : req.scores) emails.add(s.contactEmail);
+
+        Map<String, Contact> contactMap = new Map<String, Contact>();
+        for (Contact c : [SELECT Id, Email FROM Contact WHERE Email IN :emails]) {
+            contactMap.put(c.Email, c);
+        }
+
+        List<Enrollment_Score__c> scoreRecords = new List<Enrollment_Score__c>();
+        List<ResponseItem> responses = new List<ResponseItem>();
+
+        for (ScoreRequest s : req.scores) {
+
+            ResponseItem r = new ResponseItem();
+            r.email = s.contactEmail;
+
+            if (contactMap.containsKey(s.contactEmail)) {
+
+                scoreRecords.add(new Enrollment_Score__c(
+                    Contact__c = contactMap.get(s.contactEmail).Id,
+                    Score__c = s.score,
+                    Recommended_Action__c = s.recommendedAction,
+                    Source_System__c = s.sourceSystem,
+                    Scored_At__c = s.scoredAt
+                ));
+
+                r.success = true;
+                r.message = 'Created';
+
+            } else {
+                r.success = false;
+                r.message = 'Contact Not Found';
+            }
+
+            responses.add(r);
+        }
+
+        if (!scoreRecords.isEmpty()) insert scoreRecords;
+
+        return JSON.serialize(responses);
+    }
+}
