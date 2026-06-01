@@ -1,0 +1,46 @@
+public class EnrollmentScoreTriggerHandler {
+
+    public static void afterInsert(List<Enrollment_Score__c> scores) {
+
+        Map<Id, Enrollment_Score__c> latestScores =new Map<Id, Enrollment_Score__c>();
+
+        for (Enrollment_Score__c score : scores) {
+
+            if (score.Contact__c == null) {
+                continue;
+            }
+
+            Enrollment_Score__c existing = latestScores.get(score.Contact__c);
+
+            if (existing == null || score.Scored_At__c > existing.Scored_At__c) {
+
+                latestScores.put(score.Contact__c,score);
+            }
+        }
+
+        List<Contact> contactsToUpdate =new List<Contact>();
+
+        for (Id contactId : latestScores.keySet()) {
+
+            Enrollment_Score__c score =latestScores.get(contactId);
+
+            String priority;
+
+            if (score.Score__c >= 75) {
+                priority = 'Hot';
+            } else if (score.Score__c >= 40) {
+                priority = 'Warm';
+            } else {
+                priority = 'Cold';
+            }
+
+            contactsToUpdate.add(new Contact(Id = contactId,Enrollment_Priority__c = priority
+                )
+            );
+        }
+
+        if (!contactsToUpdate.isEmpty()) {
+            update contactsToUpdate;
+        }
+    }
+}
