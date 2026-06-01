@@ -1,0 +1,4 @@
+trigger EnrollmentScoreTrigger on Enrollment_Score__c (after insert) {
+
+    EnrollmentScoreTriggerHandler.afterInsert(Trigger.new);
+}
